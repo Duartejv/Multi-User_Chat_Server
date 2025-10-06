@@ -1,74 +1,80 @@
-# Configurações do compilador
+# Compilador e flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -pthread
-DEBUG_FLAGS = -g -O0 -DDEBUG
-RELEASE_FLAGS = -O3 -DNDEBUG
+CXXFLAGS = -std=c++17 -Wall -Wextra -pthread -I./libtslog -I./comum -I./servidor -I./cliente
 
-# Diretórios com novos nomes
-CODIGO_DIR = codigo
-TESTE_DIR = testes
+# Diretórios
+LIBTSLOG_DIR = libtslog
+COMUM_DIR = comum
+SERVIDOR_DIR = servidor
+CLIENTE_DIR = cliente
 BUILD_DIR = build
 
-# Arquivos fonte
-TSLOG_SRC = $(CODIGO_DIR)/libtslog/tslog.cpp
-TSLOG_HDR = $(CODIGO_DIR)/libtslog/tslog.h
-TESTE_SRC = $(TESTE_DIR)/test_concurrent_logging.cpp
+# Arquivos objeto
+TSLOG_OBJS = $(BUILD_DIR)/tslog.o
+COMUM_OBJS = $(BUILD_DIR)/message.o
+SERVIDOR_OBJS = $(BUILD_DIR)/servidor.o $(BUILD_DIR)/main_servidor.o
+CLIENTE_OBJS = $(BUILD_DIR)/cliente.o $(BUILD_DIR)/main_cliente.o
 
-# Nome do executável (adiciona .exe automaticamente no Windows se necessário)
-ifeq ($(OS),Windows_NT)
-    EXECUTABLE = $(BUILD_DIR)/test_concurrent_logging.exe
-    RM_CMD = del /Q
-    MKDIR_CMD = if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
-else
-    EXECUTABLE = $(BUILD_DIR)/test_concurrent_logging
-    RM_CMD = rm -f
-    MKDIR_CMD = mkdir -p $(BUILD_DIR)
-endif
+# Executáveis
+SERVIDOR_BIN = servidor
+CLIENTE_BIN = cliente
+TEST_CONCURRENT_BIN = test_concurrent_logging
 
 # Alvos principais
-.PHONY: all debug release test clean help
+all: directories $(SERVIDOR_BIN) $(CLIENTE_BIN) $(TEST_CONCURRENT_BIN)
 
-all: debug
+directories:
+	@mkdir -p $(BUILD_DIR)
 
-# Compilação debug
-debug: CXXFLAGS += $(DEBUG_FLAGS)
-debug: $(EXECUTABLE)
+# Biblioteca tslog
+$(BUILD_DIR)/tslog.o: $(LIBTSLOG_DIR)/tslog.cpp $(LIBTSLOG_DIR)/tslog.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Compilação release
-release: CXXFLAGS += $(RELEASE_FLAGS)
-release: $(EXECUTABLE)
+# Comum
+$(BUILD_DIR)/message.o: $(COMUM_DIR)/message.cpp $(COMUM_DIR)/message.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Compila o executável de teste
-$(EXECUTABLE): $(TESTE_SRC) $(TSLOG_SRC) $(TSLOG_HDR)
-	$(MKDIR_CMD)
-	$(CXX) $(CXXFLAGS) -I$(CODIGO_DIR) $(TESTE_SRC) $(TSLOG_SRC) -o $(EXECUTABLE)
+# Servidor
+$(BUILD_DIR)/servidor.o: $(SERVIDOR_DIR)/servidor.cpp $(SERVIDOR_DIR)/servidor.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Executa o teste
-test: $(EXECUTABLE)
-	@echo "=== Executando teste de logging concorrente ==="
-	$(EXECUTABLE)
-	@echo "=== Teste concluido! Verifique o arquivo teste_concorrente.log ==="
+$(BUILD_DIR)/main_servidor.o: $(SERVIDOR_DIR)/main_servidor.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(SERVIDOR_BIN): $(TSLOG_OBJS) $(COMUM_OBJS) $(SERVIDOR_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# Cliente
+$(BUILD_DIR)/cliente.o: $(CLIENTE_DIR)/cliente.cpp $(CLIENTE_DIR)/cliente.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/main_cliente.o: $(CLIENTE_DIR)/main_cliente.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(CLIENTE_BIN): $(TSLOG_OBJS) $(COMUM_OBJS) $(CLIENTE_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# Teste concorrente
+$(TEST_CONCURRENT_BIN): $(TSLOG_OBJS) test_concurrent_logging.cpp
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# Testes
+test: $(TEST_CONCURRENT_BIN)
+	./$(TEST_CONCURRENT_BIN)
+
+test_chat: $(SERVIDOR_BIN) $(CLIENTE_BIN)
+	@echo "Execute './servidor' em um terminal e './cliente' em outros terminais"
 
 # Limpeza
 clean:
-ifeq ($(OS),Windows_NT)
-	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)
-	if exist teste_concorrente.log del teste_concorrente.log
-else
-	rm -rf $(BUILD_DIR)
-	rm -f teste_concorrente.log
-endif
+	rm -rf $(BUILD_DIR) $(SERVIDOR_BIN) $(CLIENTE_BIN) $(TEST_CONCURRENT_BIN) *.log
 
-# Compilação rápida (sem criar diretório build)
-rapido:
-	$(CXX) $(CXXFLAGS) $(DEBUG_FLAGS) -I$(CODIGO_DIR) $(TESTE_SRC) $(TSLOG_SRC) -o test_concurrent_logging
+# Executar servidor
+run_servidor: $(SERVIDOR_BIN)
+	./$(SERVIDOR_BIN)
 
-# Ajuda
-help:
-	@echo "Alvos disponíveis:"
-	@echo "  debug    - Compila com símbolos de debug (padrão)"
-	@echo "  release  - Compila otimizado para produção"
-	@echo "  test     - Compila e executa o teste"
-	@echo "  rapido   - Compilação rápida no diretório atual"
-	@echo "  clean    - Remove arquivos gerados"
-	@echo "  help     - Mostra esta ajuda"
+# Executar cliente
+run_cliente: $(CLIENTE_BIN)
+	./$(CLIENTE_BIN)
+
+.PHONY: all directories test test_chat clean run_servidor run_cliente
